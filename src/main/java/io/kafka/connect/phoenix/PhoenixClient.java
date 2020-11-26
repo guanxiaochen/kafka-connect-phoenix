@@ -35,138 +35,131 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 
  * @author Dhananjay
- *
  */
 public class PhoenixClient {
-	
-	
-	private static final Logger log = LoggerFactory.getLogger(PhoenixClient.class);
 
-	/**
-	 * 
-	 */
-	private PhoenixConnectionManager connectionManager;
-	
-	private static final int COMMIT_INTERVAL  = 100;
-	
-	/**
-	 * @param connectionManager
-	 */
-	public PhoenixClient(final PhoenixConnectionManager connectionManager){
-		this.connectionManager = connectionManager;
-	}
-	
-	
-	/**
-	 * @param memberId
-	 * @param schema
-	 * @param tableName
-	 * @return
-	 */
-	private String formUpsert(final Schema schema, final String tableName,final String cf){
-		String[] namespace= tableName.split("\\.");
-		StringBuilder query = new StringBuilder("upsert into \""+namespace[0] +"\".\""+ namespace[1]+"\"(");
-		StringBuilder query_part2 = new StringBuilder(") values (");
-		schema.fields().stream().forEach(f -> {query.append("\"" +f.name()+"\","); query_part2.append("?,");} );
-		query.deleteCharAt(query.lastIndexOf(","));
-		query_part2.deleteCharAt(query_part2.lastIndexOf(","));
-		query.append(query_part2).append(")");
-		log.debug("Query formed "+query);
-		return query.toString();}
-	
-	
-	public void execute(final String tableName,final Schema schema,List<Map<String,Object>> records){
-		String cf = tableName.split("\\.")[1];
-		try(final Connection connection = this.connectionManager.getConnection();
-			final PreparedStatement ps = connection.prepareStatement(formUpsert( schema, tableName,cf))
-			){
-				connection.setAutoCommit(false);
-				final AtomicInteger rowCounter = new AtomicInteger(0);
-				records.stream().forEach(r ->{
-				int paramIndex = 1;
-					try {
-					
-						ps.setString(paramIndex++, String.valueOf(r.get("ROWKEY")));
-						
-						//Iterate over fields
-						List<Field> fields = schema.fields();
-						for(int i=0; i<fields.size(); i++){
-							Field f = fields.get(i);
-							Object value = r.get(f.name());
-							//log.error("field "+f.name() +" Going for value "+String.valueOf(value));
-							Schema sch = f.schema();
-							switch(sch.type()){
-							case STRING:{
-								if(value != null){
-									ps.setString(paramIndex++,String.valueOf(value));
-								}
-								else
-									ps.setNull(paramIndex++, Types.VARCHAR);
-								}
-							break;
-							case BOOLEAN:{
-								if(value != null){
-									ps.setBoolean(paramIndex++,Boolean.getBoolean(String.valueOf(value)));
-								}else{
-									ps.setNull(paramIndex++, Types.BOOLEAN);
-								}
-							}
-							break;
-							case BYTES: {
-								if(value != null){
-									ps.setBytes(paramIndex++, DatatypeConverter.parseBase64Binary((String) value));
-								}else{
-									ps.setNull(paramIndex++, Types.BINARY);
-								}
-							}
-							break;	
-							case FLOAT32:
-							case FLOAT64: {
-									if(value != null){
-										ps.setDouble(paramIndex++, Double.valueOf(String.valueOf(value)));
-									}else{
-										ps.setNull(paramIndex++, Types.FLOAT);
-									}
-							}
-							break;							
-							case INT8:
-							case INT16:
-							case INT32:
-							case INT64:{
-									if("org.apache.kafka.connect.data.Timestamp".equals(sch.name())){
-										if(value != null){
-											ps.setTimestamp(paramIndex++,new Timestamp(Long.valueOf(String.valueOf(value))) );
-										}else{
-											ps.setNull(paramIndex++, Types.TIMESTAMP);
-										}
-									}else{
-										if(value != null){
-											ps.setLong(paramIndex++, Long.valueOf(String.valueOf(value)));
-										}else{
-											ps.setNull(paramIndex++, Types.BIGINT);
-										}
-									}
-								}
-							break;
-							}
-						}
-						ps.executeUpdate();
-						
-						if(rowCounter.incrementAndGet()%COMMIT_INTERVAL == 0){
-							connection.commit();
-							rowCounter.set(0);
-						}
-						
-					} catch (SQLException e) {
-						throw new RuntimeException(e);
-					}
-				});
-			connection.commit();
-		} catch (SQLException e) {
-			throw new RuntimeException(e);
-		}
-		
-	}
+
+    private static final Logger log = LoggerFactory.getLogger(PhoenixClient.class);
+
+    /**
+     *
+     */
+    private final PhoenixConnectionManager connectionManager;
+
+    private static final int COMMIT_INTERVAL = 100;
+
+    /**
+     * @param connectionManager
+     */
+    public PhoenixClient(final PhoenixConnectionManager connectionManager) {
+        this.connectionManager = connectionManager;
+    }
+
+
+    /**
+     * @param schema
+     * @param tableName
+     * @return
+     */
+    private String formUpsert(final Schema schema, final String tableName) {
+        String[] namespace = tableName.toUpperCase().split("\\.");
+
+        StringBuilder query_part1 = new StringBuilder();
+        StringBuilder query_part2 = new StringBuilder();
+        schema.fields().forEach(f -> {
+            query_part1.append(",\"").append(f.name().toUpperCase()).append("\"");
+            query_part2.append(",?");
+        });
+        String sql = String.format("upsert into \"%s\".\"%s\"(%s) values (%s)", namespace[0], namespace[1], query_part1.substring(1), query_part2.substring(1));
+        log.info("Query formed " + sql);
+        return sql;
+    }
+
+
+    public void execute(final String tableName, final Schema schema, List<Map<String, Object>> records) {
+        String sql = formUpsert(schema, tableName);
+        try (Connection connection = this.connectionManager.getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
+            connection.setAutoCommit(false);
+            AtomicInteger rowCounter = new AtomicInteger(0);
+            records.forEach(r -> {
+                int paramIndex = 1;
+                try {
+                    //Iterate over fields
+                    List<Field> fields = schema.fields();
+                    for (Field f : fields) {
+                        Object value = r.get(f.name());
+                        //log.error("field "+f.name() +" Going for value "+String.valueOf(value));
+                        Schema sch = f.schema();
+                        switch (sch.type()) {
+                            case STRING: {
+                                if (value != null) {
+                                    ps.setString(paramIndex++, String.valueOf(value));
+                                } else
+                                    ps.setNull(paramIndex++, Types.VARCHAR);
+                            }
+                            break;
+                            case BOOLEAN: {
+                                if (value != null) {
+                                    ps.setBoolean(paramIndex++, Boolean.getBoolean(String.valueOf(value)));
+                                } else {
+                                    ps.setNull(paramIndex++, Types.BOOLEAN);
+                                }
+                            }
+                            break;
+                            case BYTES: {
+                                if (value != null) {
+                                    ps.setBytes(paramIndex++, DatatypeConverter.parseBase64Binary((String) value));
+                                } else {
+                                    ps.setNull(paramIndex++, Types.BINARY);
+                                }
+                            }
+                            break;
+                            case FLOAT32:
+                            case FLOAT64: {
+                                if (value != null) {
+                                    ps.setDouble(paramIndex++, Double.parseDouble(String.valueOf(value)));
+                                } else {
+                                    ps.setNull(paramIndex++, Types.FLOAT);
+                                }
+                            }
+                            break;
+                            case INT8:
+                            case INT16:
+                            case INT32:
+                            case INT64: {
+                                if ("org.apache.kafka.connect.data.Timestamp".equals(sch.name())) {
+                                    if (value != null) {
+                                        ps.setTimestamp(paramIndex++, new Timestamp(Long.parseLong(String.valueOf(value))));
+                                    } else {
+                                        ps.setNull(paramIndex++, Types.TIMESTAMP);
+                                    }
+                                } else {
+                                    if (value != null) {
+                                        ps.setLong(paramIndex++, Long.parseLong(String.valueOf(value)));
+                                    } else {
+                                        ps.setNull(paramIndex++, Types.BIGINT);
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    ps.executeUpdate();
+
+                    if (rowCounter.incrementAndGet() % COMMIT_INTERVAL == 0) {
+                        connection.commit();
+                        rowCounter.set(0);
+                    }
+
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            connection.commit();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
 }

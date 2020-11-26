@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import io.kafka.connect.phoenix.config.PhoenixSinkConfig;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -53,7 +54,7 @@ public class PhoenixRecordParser implements EventParser {
 		this.valueConverter = new JsonConverter();
 
 		Map<String, String> props = new HashMap<>(1);
-		props.put("schemas.enable", Boolean.TRUE.toString());
+		props.put("schemas.enable", Boolean.FALSE.toString());
 
 		this.keyConverter.configure(props, true);
 		this.valueConverter.configure(props, false);
@@ -64,7 +65,7 @@ public class PhoenixRecordParser implements EventParser {
 	public Map<String, Object> parse(final String topic, final Schema schema, final Object value, final boolean isKey)
 			throws EventParsingException {
 		try {
-			byte[] valueBytes = null;
+			byte[] valueBytes;
 			if (isKey) {
 				valueBytes = keyConverter.fromConnectData(topic, schema, value);
 			} else {
@@ -74,9 +75,8 @@ public class PhoenixRecordParser implements EventParser {
 				return Collections.emptyMap();
 			}
 
-			Map<String, Object> keyValues = new HashMap<>();
 			final JsonNode valueNode = OBJECT_MAPPER.readTree(new ByteArrayInputStream(valueBytes));
-			keyValues = OBJECT_MAPPER.convertValue(valueNode.get("payload"), new TypeReference<Map<String, Object>>() {
+			Map<String, Object> keyValues = OBJECT_MAPPER.convertValue(valueNode, new TypeReference<Map<String, Object>>() {
 			});
 			if(keyValues == null){
 				keyValues = Collections.emptyMap();
@@ -92,14 +92,12 @@ public class PhoenixRecordParser implements EventParser {
 	
 	@Override
 	public Map<String, Object> parseKeyObject(SinkRecord sr) throws EventParsingException {
-		Map<String,Object> map =this.parse(sr.topic(), sr.keySchema(), sr.key(), true);
-		return map;
+		return this.parse(sr.topic(), sr.keySchema(), sr.key(), true);
 	}
 
 	@Override
 	public Map<String, Object> parseValueObject(SinkRecord sr) throws EventParsingException {
-		Map<String,Object> map  = this.parse(sr.topic(), sr.valueSchema(), sr.value(), false);
-		return map;
+		return this.parse(sr.topic(), sr.valueSchema(), sr.value(), false);
 	}
 
 }

@@ -21,6 +21,7 @@ package io.kafka.connect.phoenix.util;
 import java.util.Map;
 import java.util.Set;
 
+import io.kafka.connect.phoenix.parser.PhoenixRecordParser;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,58 +47,19 @@ public class ToPhoenixRecordFunction implements Function<SinkRecord, Map<String,
     
     public ToPhoenixRecordFunction(final PhoenixSinkConfig sinkConfig){
     	this.sinkConfig = sinkConfig;
-    	this.eventParser = this.sinkConfig.eventParser();
+    	this.eventParser = new PhoenixRecordParser();
     }
 	
 	@Override
 	public Map<String,Object> apply(SinkRecord sinkRecord) {
 		try {
 			Preconditions.checkNotNull(sinkRecord);
-			final String table = sinkRecord.topic();
-			//final String delimiter = rowkeyDelimiter(sinkRecord.topic());
-			final Map<String, Object> valuesMap = this.eventParser.parseValueObject(sinkRecord);
-			//final Map<String, Object> keysMap = this.eventParser.parseKeyObject(sinkRecord);
-
-			//valuesMap.putAll(keysMap);
-			//final String[] rowkeyColumns = rowkeyColumns(table);
-			//final String rowkey = toRowKey(valuesMap, rowkeyColumns, delimiter);
-
-			//valuesMap.put("ROWKEY", rowkey);
-			
-			return valuesMap;
+			return this.eventParser.parseValueObject(sinkRecord);
 		} catch (Exception e) {
-			e.printStackTrace();
-			LOGGER.error(
-					"Exception while parsing sink record from topic " + sinkRecord.topic() + " key " + sinkRecord.key(),
-					e);
-			//TODO send message to error topic...
+			LOGGER.error("Exception while parsing sink record from topic " + sinkRecord.topic() + " key " + sinkRecord.key(),e);
 			throw new RuntimeException(e);
 		}	
 	}
-	
-	
-    /**
-     * A kafka topic is a 1:1 mapping to a HBase table.
-     * @param table
-     * @return
-     */
-   /* private String[] rowkeyColumns(final String table) {
-        final String entry = String.format(PhoenixSinkConfig.TABLE_ROWKEY_COLUMNS_TEMPLATE, table);
-        final String entryValue = sinkConfig.getPropertyValue(entry);
-        return entryValue.split(",");
-    }*/
-
-    /**
-     * Returns the delimiter for a table. If nothing is configured in properties,
-     * we use the default {@link PhoenixSinkConfig#DEFAULT_HBASE_ROWKEY_DELIMITER}
-     * @param table hbase table.
-     * @return
-     */
-    /*private String rowkeyDelimiter(final String table) {
-        final String entry = String.format(PhoenixSinkConfig.TABLE_ROWKEY_DELIMITER_TEMPLATE, table);
-        final String entryValue = sinkConfig.getPropertyValue(entry, PhoenixSinkConfig.DEFAULT_HBASE_ROWKEY_DELIMITER);
-        return entryValue;
-    }*/
 
     /**
      * Returns the name space based table for given topic name.
@@ -106,38 +68,8 @@ public class ToPhoenixRecordFunction implements Function<SinkRecord, Map<String,
      *
      */
     public String tableName(final String topic) {
-        return String.format(PhoenixSinkConfig.HBASE_TABLE_NAME, topic);
+        return sinkConfig.getPropertyValue(String.format(PhoenixSinkConfig.HBASE_TABLE_NAME, topic)).toUpperCase();
     }
-    
-    
-    /**
-    *
-    * @param valuesMap
-    * @param columns
-    * @return
-    */
-   private String toRowKey(final Map<String, Object> valuesMap, final String[] columns, final String delimiter) {
-       Preconditions.checkNotNull(valuesMap);
-       Preconditions.checkNotNull(delimiter);
-       String rowkey = null;
-      // byte[] delimiterBytes = Bytes.toBytes(delimiter);
-       //For phoenix we need single zero/ null byte byte as de-limiter
-       Set<String> keys = valuesMap.keySet();
-       for(String column : columns) {
-       	for(String key : keys){
-       		if(key.equalsIgnoreCase(column)){
-       			Object columnValue = valuesMap.get(key);
-                   if(rowkey == null) {
-                       rowkey = String.valueOf(columnValue);
-                   } else {
-                       rowkey = rowkey + "|"+ String.valueOf(columnValue);
-                   }
-                   break;
-       		}
-           }
-       }
-       return rowkey;
-   }
 
 	public EventParser getEventParser() {
 		return eventParser;

@@ -29,7 +29,7 @@ import java.sql.SQLException;
  */
 public class PhoenixConnectionManager {
 
-	private String phoenixURL;
+	private final String phoenixURL;
 	
 	public PhoenixConnectionManager(final String phoenixurl) {
 		this.phoenixURL = phoenixurl;
@@ -46,8 +46,7 @@ public class PhoenixConnectionManager {
 	 * @throws SQLException
 	 */
 	public Connection getConnection() throws SQLException {
-		Connection conn =  DriverManager.getConnection(String.format("jdbc:phoenix:thin:url=%s;serialization=PROTOBUF",phoenixURL));
-		return conn;
+		return DriverManager.getConnection(String.format("jdbc:phoenix:thin:url=%s;serialization=PROTOBUF", phoenixURL));
 	}
 	
 }

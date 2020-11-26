@@ -18,8 +18,10 @@
 
 package io.kafka.connect.phoenix.parser;
 
+import java.util.HashMap;
 import java.util.Map;
 
+import io.kafka.connect.phoenix.config.PhoenixSinkConfig;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -40,7 +42,7 @@ public class PhoenixRecordParserTest {
 
     @Before
     public void setup() {
-        eventParser = new PhoenixRecordParser(); 
+        eventParser = new PhoenixRecordParser();
     }
 
     @Test

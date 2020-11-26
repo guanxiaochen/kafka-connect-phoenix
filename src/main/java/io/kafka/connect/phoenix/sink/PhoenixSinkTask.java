@@ -51,10 +51,6 @@ public class PhoenixSinkTask extends SinkTask {
 	private static final Logger log =LoggerFactory.getLogger(PhoenixSinkTask.class);
 
     private ToPhoenixRecordFunction toPhoenixRecordFunction;
-
-	private Converter keyConverter;
-	
-	private Converter valueConverter;
 	
 	private PhoenixClient phoenixClient;
 	
@@ -66,40 +62,21 @@ public class PhoenixSinkTask extends SinkTask {
     @Override
     public void start(Map<String, String> props) {
         final PhoenixSinkConfig sinkConfig = new PhoenixSinkConfig(props);
-        sinkConfig.validate(); // we need to do some sanity checks of the properties we configure.
-        
-        
+
         this.toPhoenixRecordFunction = new ToPhoenixRecordFunction(sinkConfig);
         this.phoenixClient = new PhoenixClient(new PhoenixConnectionManager(sinkConfig.getPropertyValue(PhoenixSinkConfig.PQS_URL)));
-    
-        try {
-			this.keyConverter = (Converter) Class.forName("org.apache.kafka.connect.json.JsonConverter").newInstance();
-			this.valueConverter = (Converter) Class.forName("org.apache.kafka.connect.json.JsonConverter")
-					.newInstance();
-			Map<String, Object> converterMap = new HashMap<>();
-			converterMap.put("key.converter.schemas.enable", false);
-			converterMap.put("value.converter.schemas.enable", false);
-			this.keyConverter.configure(converterMap, true);
-			this.valueConverter.configure(converterMap, true);
-		} catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
-			log.warn("Failed to load key value converter for stat topic ", e);
-		}
     }
 
     @Override
     public void put(final Collection<SinkRecord> records) { 
     	long startTime = System.nanoTime();
     	try{
-        	Map<PhoenixSchemaInfo, List<SinkRecord>> bySchema = records.stream().collect(
-        				groupingBy(e -> new PhoenixSchemaInfo(
-        						toPhoenixRecordFunction.tableName(e.topic()),e.valueSchema())));
-        	
-        	Map<PhoenixSchemaInfo,List<Map<String,Object>>> toPhoenixRecords = bySchema.entrySet().parallelStream().collect(toMap( (es) -> es.getKey(),
-        			(es) -> es.getValue().stream().map(r -> toPhoenixRecordFunction.apply(r)).collect(toList())));
-        	
-        	toPhoenixRecords.entrySet().forEach(e->{
-        		this.phoenixClient.execute(e.getKey().getTableName(), e.getKey().getSchema(),e.getValue());
-        	});
+			Map<PhoenixSchemaInfo, List<SinkRecord>> bySchema = records.stream().collect(
+					groupingBy(e -> new PhoenixSchemaInfo(toPhoenixRecordFunction.tableName(e.topic()), e.valueSchema())));
+			bySchema.forEach((key, value) -> {
+				List<Map<String, Object>> phoenixRecords = value.stream().map(r -> toPhoenixRecordFunction.apply(r)).collect(toList());
+				this.phoenixClient.execute(key.getTableName(), key.getSchema(), phoenixRecords);
+			});
         }catch(Exception e){
         	log.error("Exception while persisting records"+ records,e);
         }
