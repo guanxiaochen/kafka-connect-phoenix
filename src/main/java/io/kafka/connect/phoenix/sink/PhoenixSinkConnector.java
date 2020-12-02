@@ -37,9 +37,8 @@ import java.util.Map;
  */
 public class PhoenixSinkConnector extends SinkConnector {
 
-    public static final String VERSION = "1.0";
+    public static final String VERSION = "1.1";
     private Map<String, String> configProperties;
-    private ConfigDef config;
 
     @Override
     public String version() {
@@ -49,7 +48,6 @@ public class PhoenixSinkConnector extends SinkConnector {
     @Override
     public void start(Map<String, String> props) {
         this.configProperties = props;
-        this.config = PhoenixSinkConfig.getConfigDef(props);
     }
 
     @Override
@@ -73,6 +71,6 @@ public class PhoenixSinkConnector extends SinkConnector {
 
     @Override
     public ConfigDef config() {
-        return config != null ? config : PhoenixSinkConfig.getConfigDef(Collections.emptyMap());
+        return PhoenixSinkConfig.CONFIG;
     }
 }

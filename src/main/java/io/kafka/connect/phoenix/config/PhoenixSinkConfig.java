@@ -19,10 +19,13 @@
 package io.kafka.connect.phoenix.config;
 
 import com.google.common.base.Preconditions;
+import io.kafka.connect.phoenix.parser.TableInfo;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 
+import java.sql.Types;
 import java.util.Map;
 
 /**
@@ -31,12 +34,12 @@ import java.util.Map;
 public class PhoenixSinkConfig extends AbstractConfig {
 
     public static final String PQS_URL = "pqs.url";
-    public static String DEFAULT_HBASE_ROWKEY_DELIMITER = ",";
 
-    public static final String HBASE_TABLE_NAME = "hbase.%s.table.name";
+    public static final String PHOENIX_TABLE_NAME = "phoenix.table";
+    public static final String PHOENIX_TABLE_FIELDS = "phoenix.fields";
 
     public PhoenixSinkConfig(Map<String, String> originals) {
-        this(getConfigDef(originals), originals);
+        this(CONFIG, originals);
     }
 
     public PhoenixSinkConfig(ConfigDef definition, Map<String, String> originals) {
@@ -62,18 +65,21 @@ public class PhoenixSinkConfig extends AbstractConfig {
         return super.getString(propertyName);
     }
 
-    public static ConfigDef getConfigDef(Map<String, String> originals) {
+    /**
+     * table info
+     */
+    public TableInfo getTableInfo() {
+        return TableInfo.parse(getPropertyValue(PHOENIX_TABLE_NAME), getPropertyValue(PHOENIX_TABLE_FIELDS));
+    }
+
+
+    public static ConfigDef CONFIG = getConfigDef();
+    private static ConfigDef getConfigDef() {
         ConfigDef def = new ConfigDef();
         def.define(PQS_URL, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "Phoenix Query Server url http://host:8765 of the hbase cluster");
         def.define(SinkConnectorConfig.TOPICS_CONFIG, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "List of topics to consume, separated by commas");
-        if (originals != null) {
-            String topicsAsStr = originals.get(SinkConnectorConfig.TOPICS_CONFIG);
-            if (topicsAsStr != null) {
-                for (String topic : topicsAsStr.split(DEFAULT_HBASE_ROWKEY_DELIMITER)) {
-                    def.define(String.format(PhoenixSinkConfig.HBASE_TABLE_NAME, topic), ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "table name of topic:" + topic);
-                }
-            }
-        }
+        def.define(PHOENIX_TABLE_NAME, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "phoenix table name");
+        def.define(PHOENIX_TABLE_FIELDS, ConfigDef.Type.STRING, "", ConfigDef.Importance.HIGH, "phoenix table fields");
         return def;
     }
 }

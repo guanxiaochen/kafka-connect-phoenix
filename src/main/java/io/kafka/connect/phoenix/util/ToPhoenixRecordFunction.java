@@ -19,7 +19,6 @@
 package io.kafka.connect.phoenix.util;
 
 import java.util.Map;
-import java.util.Set;
 
 import io.kafka.connect.phoenix.parser.PhoenixRecordParser;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -60,17 +59,6 @@ public class ToPhoenixRecordFunction implements Function<SinkRecord, Map<String,
 			throw new RuntimeException(e);
 		}	
 	}
-
-    /**
-     * Returns the name space based table for given topic name.
-     * This derives name space based on the member partition of the sink record received.
-     * 
-     *
-     */
-    public String tableName(final String topic) {
-        return sinkConfig.getPropertyValue(String.format(PhoenixSinkConfig.HBASE_TABLE_NAME, topic)).toUpperCase();
-    }
-
 	public EventParser getEventParser() {
 		return eventParser;
 	}

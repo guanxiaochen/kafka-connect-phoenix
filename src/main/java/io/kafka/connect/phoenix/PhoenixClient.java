@@ -18,21 +18,19 @@
 
 package io.kafka.connect.phoenix;
 
+import io.kafka.connect.phoenix.parser.TableInfo;
+import org.apache.commons.collections.MapUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.xml.bind.DatatypeConverter;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import javax.xml.bind.DatatypeConverter;
-
-import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Schema;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * @author Dhananjay
@@ -58,27 +56,25 @@ public class PhoenixClient {
 
 
     /**
-     * @param schema
-     * @param tableName
+     * @param tableInfo table
      * @return
      */
-    private String formUpsert(final Schema schema, final String tableName) {
-        String[] namespace = tableName.toUpperCase().split("\\.");
+    private String formUpsert(final TableInfo tableInfo) {
 
         StringBuilder query_part1 = new StringBuilder();
         StringBuilder query_part2 = new StringBuilder();
-        schema.fields().forEach(f -> {
-            query_part1.append(",\"").append(f.name().toUpperCase()).append("\"");
+        tableInfo.getFields().forEach(f -> {
+            query_part1.append(",\"").append(f.getName().toUpperCase()).append("\"");
             query_part2.append(",?");
         });
-        String sql = String.format("upsert into \"%s\".\"%s\"(%s) values (%s)", namespace[0], namespace[1], query_part1.substring(1), query_part2.substring(1));
+        String sql = String.format("upsert into %s(%s) values (%s)", tableInfo.getFullName(), query_part1.substring(1), query_part2.substring(1));
         log.info("Query formed " + sql);
         return sql;
     }
 
 
-    public void execute(final String tableName, final Schema schema, List<Map<String, Object>> records) {
-        String sql = formUpsert(schema, tableName);
+    public void execute(final TableInfo tableInfo, List<Map<String, Object>> records) {
+        String sql = formUpsert(tableInfo);
         try (Connection connection = this.connectionManager.getConnection(); PreparedStatement ps = connection.prepareStatement(sql)) {
             connection.setAutoCommit(false);
             AtomicInteger rowCounter = new AtomicInteger(0);
@@ -86,61 +82,50 @@ public class PhoenixClient {
                 int paramIndex = 1;
                 try {
                     //Iterate over fields
-                    List<Field> fields = schema.fields();
-                    for (Field f : fields) {
-                        Object value = r.get(f.name());
+                    List<TableInfo.Field> fields = tableInfo.getFields();
+                    for (TableInfo.Field f : fields) {
+                        Object value = r.get(f.getName());
+                        if (value == null) {
+                            ps.setNull(paramIndex++, f.getType());
+                            continue;
+                        }
+
                         //log.error("field "+f.name() +" Going for value "+String.valueOf(value));
-                        Schema sch = f.schema();
-                        switch (sch.type()) {
-                            case STRING: {
-                                if (value != null) {
-                                    ps.setString(paramIndex++, String.valueOf(value));
-                                } else
-                                    ps.setNull(paramIndex++, Types.VARCHAR);
+                        switch (f.getType()) {
+                            case Types.VARCHAR: {
+                                ps.setString(paramIndex++, MapUtils.getString(r, f.getName()));
                             }
                             break;
-                            case BOOLEAN: {
-                                if (value != null) {
-                                    ps.setBoolean(paramIndex++, Boolean.getBoolean(String.valueOf(value)));
-                                } else {
-                                    ps.setNull(paramIndex++, Types.BOOLEAN);
-                                }
+                            case Types.BOOLEAN: {
+                                ps.setBoolean(paramIndex++, MapUtils.getBoolean(r, f.getName()));
                             }
                             break;
-                            case BYTES: {
-                                if (value != null) {
-                                    ps.setBytes(paramIndex++, DatatypeConverter.parseBase64Binary((String) value));
-                                } else {
-                                    ps.setNull(paramIndex++, Types.BINARY);
-                                }
+                            case Types.BINARY: {
+                                ps.setBytes(paramIndex++, MapUtils.getString(r, f.getName()).getBytes());
                             }
                             break;
-                            case FLOAT32:
-                            case FLOAT64: {
-                                if (value != null) {
-                                    ps.setDouble(paramIndex++, Double.parseDouble(String.valueOf(value)));
-                                } else {
-                                    ps.setNull(paramIndex++, Types.FLOAT);
-                                }
+                            case Types.FLOAT: {
+                                ps.setFloat(paramIndex++, MapUtils.getFloat(r, f.getName()));
                             }
                             break;
-                            case INT8:
-                            case INT16:
-                            case INT32:
-                            case INT64: {
-                                if ("org.apache.kafka.connect.data.Timestamp".equals(sch.name())) {
-                                    if (value != null) {
-                                        ps.setTimestamp(paramIndex++, new Timestamp(Long.parseLong(String.valueOf(value))));
-                                    } else {
-                                        ps.setNull(paramIndex++, Types.TIMESTAMP);
-                                    }
-                                } else {
-                                    if (value != null) {
-                                        ps.setLong(paramIndex++, Long.parseLong(String.valueOf(value)));
-                                    } else {
-                                        ps.setNull(paramIndex++, Types.BIGINT);
-                                    }
-                                }
+                            case Types.DOUBLE: {
+                                ps.setDouble(paramIndex++, MapUtils.getDouble(r, f.getName()));
+                            }
+                            break;
+                            case Types.TINYINT: {
+                                ps.setByte(paramIndex++, MapUtils.getByte(r, f.getName()));
+                            }
+                            break;
+                            case Types.SMALLINT: {
+                                ps.setInt(paramIndex++, MapUtils.getShort(r, f.getName()));
+                            }
+                            break;
+                            case Types.INTEGER: {
+                                ps.setInt(paramIndex++, MapUtils.getInteger(r, f.getName()));
+                            }
+                            break;
+                            case Types.BIGINT: {
+                                ps.setLong(paramIndex++, MapUtils.getLong(r, f.getName()));
                             }
                             break;
                         }

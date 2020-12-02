@@ -5,7 +5,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>io.kafka.connect</groupId>
 	<artifactId>kafka-connect-phoenix</artifactId>
-	<version>0.1</version>
+	<version>1.1</version>
 	<name>kafka-connect-phoenix</name>
 	<url>http://maven.apache.org</url>
 	<properties>

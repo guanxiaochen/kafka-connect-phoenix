@@ -19,27 +19,26 @@
 
 package io.kafka.connect.phoenix.sink;
 
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.toList;
-import static java.util.stream.Collectors.toMap;
-
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.connect.sink.SinkRecord;
-import org.apache.kafka.connect.sink.SinkTask;
-import org.apache.kafka.connect.storage.Converter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.kafka.connect.phoenix.PhoenixClient;
 import io.kafka.connect.phoenix.PhoenixConnectionManager;
 import io.kafka.connect.phoenix.config.PhoenixSinkConfig;
+import io.kafka.connect.phoenix.parser.EventParsingException;
+import io.kafka.connect.phoenix.parser.TableInfo;
 import io.kafka.connect.phoenix.util.ToPhoenixRecordFunction;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.connect.data.Field;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTask;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+
+import static java.util.stream.Collectors.toList;
 
 /**
  * 
@@ -50,8 +49,9 @@ public class PhoenixSinkTask extends SinkTask {
 	
 	private static final Logger log =LoggerFactory.getLogger(PhoenixSinkTask.class);
 
+    private TableInfo tableInfo;
     private ToPhoenixRecordFunction toPhoenixRecordFunction;
-	
+
 	private PhoenixClient phoenixClient;
 	
     @Override
@@ -61,28 +61,37 @@ public class PhoenixSinkTask extends SinkTask {
 
     @Override
     public void start(Map<String, String> props) {
-        final PhoenixSinkConfig sinkConfig = new PhoenixSinkConfig(props);
-
+        PhoenixSinkConfig sinkConfig = new PhoenixSinkConfig(props);
         this.toPhoenixRecordFunction = new ToPhoenixRecordFunction(sinkConfig);
         this.phoenixClient = new PhoenixClient(new PhoenixConnectionManager(sinkConfig.getPropertyValue(PhoenixSinkConfig.PQS_URL)));
+        this.tableInfo = sinkConfig.getTableInfo();
     }
 
     @Override
     public void put(final Collection<SinkRecord> records) { 
     	long startTime = System.nanoTime();
     	try{
-			Map<PhoenixSchemaInfo, List<SinkRecord>> bySchema = records.stream().collect(
-					groupingBy(e -> new PhoenixSchemaInfo(toPhoenixRecordFunction.tableName(e.topic()), e.valueSchema())));
-			bySchema.forEach((key, value) -> {
-				List<Map<String, Object>> phoenixRecords = value.stream().map(r -> toPhoenixRecordFunction.apply(r)).collect(toList());
-				this.phoenixClient.execute(key.getTableName(), key.getSchema(), phoenixRecords);
-			});
-        }catch(Exception e){
-        	log.error("Exception while persisting records"+ records,e);
+    	    if(this.tableInfo.getFields().isEmpty()) {
+                loadSchemaFields(records.iterator().next());
+            }
+            List<Map<String, Object>> phoenixRecords = records.stream().map(r -> toPhoenixRecordFunction.apply(r)).collect(toList());
+            this.phoenixClient.execute(tableInfo, phoenixRecords);
+        } catch (Exception e) {
+        	log.error("Exception while persisting records"+ records, e);
         }
       log.info("Time taken to persist "+ records.size() +" sink records in ms"+(System.nanoTime()-startTime)/1000);
     }
- 
+
+    private void loadSchemaFields(SinkRecord record) {
+        Schema schema = record.valueSchema();
+        if (schema == null) {
+            throw new EventParsingException("valueSchema not found, or config for " + PhoenixSinkConfig.PHOENIX_TABLE_FIELDS);
+        }
+        for (Field field : schema.fields()) {
+            this.tableInfo.addFields(field.name(), field.schema().type());
+        }
+    }
+
     @Override
     public void flush(Map<TopicPartition, OffsetAndMetadata> offsets) {
         // NO-OP

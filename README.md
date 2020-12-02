@@ -13,6 +13,6 @@ Below are the properties that need to be passed in the configuration file:
 name | data type | required | description
 -----|-----------|----------|------------
 pqs.url | string | yes | Phoenix Query Server URL [http:\\host:8765]
-event.parser.class | string | yes | PhoenixRecordParser
 topics | string | yes | list of kafka topics.
-hbase.`<topicname>`.table.name | string | yes | Phoenix table name in which records needs to be saved for '<topicname>'
+hbase.table | string | yes | Pphoenix table name
+phoenix.fields | string | yes | phoenix table fields
