@@ -14,5 +14,5 @@ name | data type | required | description
 -----|-----------|----------|------------
 pqs.url | string | yes | Phoenix Query Server URL [http:\\host:8765]
 topics | string | yes | list of kafka topics.
-hbase.table | string | yes | Pphoenix table name
-phoenix.fields | string | yes | phoenix table fields
+phoenix.table | string | yes | Pphoenix table name
+phoenix.fields | string | no | phoenix table fields, if value is no, require value.converter.schemas
