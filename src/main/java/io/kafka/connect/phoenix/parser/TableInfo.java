@@ -45,10 +45,13 @@ public class TableInfo {
         if(tableFields != null) {
             for (String fieldStr : tableFields.split(",")) {
                 String[] fieldSplit = fieldStr.split(":");
-                if (fieldSplit.length == 1) {
-                    tableInfo.addFields(fieldSplit[0].trim(), Types.VARCHAR);
-                } else {
-                    tableInfo.addFields(fieldSplit[0].trim(), fieldSplit[1].trim());
+                String name = fieldSplit[0].trim();
+                if(!name.isEmpty()) {
+                    if (fieldSplit.length == 1) {
+                        tableInfo.addFields(name, Types.VARCHAR);
+                    } else {
+                        tableInfo.addFields(name, fieldSplit[1].trim());
+                    }
                 }
             }
         }

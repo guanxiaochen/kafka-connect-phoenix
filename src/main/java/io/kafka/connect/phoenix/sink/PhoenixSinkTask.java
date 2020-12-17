@@ -68,7 +68,10 @@ public class PhoenixSinkTask extends SinkTask {
     }
 
     @Override
-    public void put(final Collection<SinkRecord> records) { 
+    public void put(final Collection<SinkRecord> records) {
+        if (records.isEmpty()) {
+            return;
+        }
     	long startTime = System.nanoTime();
     	try{
     	    if(this.tableInfo.getFields().isEmpty()) {
